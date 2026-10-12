@@ -4,9 +4,11 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)](#system-requirements)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/)
 
-Penelope is a Windows application for people who want local AI models and do not want a command line. A shortcut opens a dashboard in the browser already on the computer. Every install, start, stop, download, and update is a button on that page.
+Penelope makes local AI simple.
 
-The dashboard stays on this computer. It binds to `127.0.0.1` only. A separate switch can open Ollama to the local network. That switch does not publish the Penelope page.
+Built for users who do not want to use the command line, Penelope provides a clean browser-based dashboard for installing, managing, and running local AI tools. Installing Ollama, downloading models, updating software, and starting or stopping services are all available through simple controls.
+
+By default, the dashboard is only accessible from the local computer and binds to 127.0.0.1. Users may choose to expose the Ollama API to other devices on the local network, while the Penelope management interface remains private and local-only.
 
 ## Contents
 
@@ -25,13 +27,19 @@ The dashboard stays on this computer. It binds to `127.0.0.1` only. A separate s
 
 ## Project introduction
 
-Local models are usually installed from a terminal: a runtime, a server, a model tag, a port, and a GPU driver. Penelope exists so a person can do that work from one page.
+Local AI is often managed through a terminal. Users must install runtimes, configure servers, remember model names, manage ports, and ensure GPU drivers are working correctly. Penelope exists to bring all of those tasks together into a single, beginner-friendly interface.
 
-**Penelope** keeps the household running. It installs and updates Ollama, starts and stops the server, downloads models, loads them into memory, and shows CPU, memory, and graphics use.
+Penelope is a management tool for local AI software and services. It helps users install, configure, update, and monitor tools such as Ollama and local AI models through a simple web interface. It can start and stop services, manage models, and provide visibility into CPU, memory, and GPU usage. The goal is simple: make local AI accessible without requiring command-line knowledge.
 
-**Odysseus** is the chat product. Penelope's Chat page only checks that a model answers. It is a short conversation in the current browser tab. Odysseus remains the place for the full conversation. The two are meant to meet later as a plugin: Odysseus appears in Penelope's Tools list, and Penelope does not grow a second chat application.
+Penelope is designed to remain tool-agnostic. While Ollama is the first and primary focus, the long-term vision is to support a growing ecosystem of local AI tools. Future versions may help users install, configure, and manage additional applications from a single dashboard.
 
-The name comes from the Odyssey. Penelope kept the household while Odysseus was away. Here, Penelope keeps the local models ready, and Odysseus is the journey those models take part in.
+One of the first planned integrations after Ollama is Odysseus, a separate project that provides a powerful AI workspace for chat, agents, research, and workflows. Penelope is not affiliated with Odysseus and is not intended to replace it. Instead, Penelope aims to make installing and maintaining tools like Odysseus easier for end users.
+
+To support troubleshooting and quick verification, Penelope includes a lightweight Chat page that allows users to confirm that a model is responding correctly. It is intended as a testing and diagnostics tool rather than a full AI workspace.
+
+The name comes from The Odyssey. In Greek mythology, Penelope maintained the household while Odysseus travelled the world on a long and difficult journey. That relationship inspired the name of this project. Just as Penelope prepared and maintained the home, Penelope helps prepare and maintain the local AI environment that other tools depend on.
+
+Any AI tool can be part of the journey. Penelope helps prepare the ship.
 
 ## Features
 
