@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Qwen 2.5 0.5B",
+    "tag": "qwen2.5:0.5b",
+    "sizeBytes": 400000000,
+    "summary": "The smallest starter. Useful for trying a download on a computer with little free memory.",
+    "role": "starter-tiny",
+    "minRamGb": 4,
+    "minVramGb": 1
+  },
+  {
+    "name": "Llama 3.2 1B",
+    "tag": "llama3.2:1b",
+    "sizeBytes": 1300000000,
+    "summary": "A small general model. A comfortable starting point when memory is modest.",
+    "role": "starter-small",
+    "minRamGb": 8,
+    "minVramGb": 2
+  },
+  {
+    "name": "Llama 3.2 3B",
+    "tag": "llama3.2:3b",
+    "sizeBytes": 2000000000,
+    "summary": "A stronger small model for a computer with more memory.",
+    "role": "starter-standard",
+    "minRamGb": 16,
+    "minVramGb": 4
+  }
+]

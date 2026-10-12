@@ -1,0 +1,7 @@
+{
+  "id": "sample",
+  "name": "Sample tool",
+  "assembly": "Penelope.Plugins.Sample.dll",
+  "hostApi": 1,
+  "summary": "A placeholder that proves a new tool can appear without changing Penelope. It does not install anything on this computer."
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#282c34"/>
+  <rect width="220" height="540" fill="#111111"/>
+  <rect x="28" y="28" width="36" height="36" rx="8" fill="#111827"/>
+  <text x="37" y="54" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">P</text>
+  <text x="76" y="52" fill="#9cdef2" font-family="Segoe UI, Arial, sans-serif" font-size="16">Penelope</text>
+  <text x="260" y="250" fill="#9cdef2" font-family="Segoe UI, Arial, sans-serif" font-size="28">Models</text>
+  <text x="260" y="286" fill="#6b8a94" font-family="Segoe UI, Arial, sans-serif" font-size="16">Screenshot placeholder</text>
+</svg>

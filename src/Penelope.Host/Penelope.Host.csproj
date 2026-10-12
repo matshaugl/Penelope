@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Version>0.1.0</Version>
+    <RootNamespace>Penelope.Host</RootNamespace>
+    <ApplicationIcon>Assets\penelope.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\branding\penelope.svg">
+      <LogicalName>Penelope.Host.penelope.svg</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Penelope.Abstractions\Penelope.Abstractions.csproj" />
+    <InternalsVisibleTo Include="Penelope.Host.Tests" />
+  </ItemGroup>
+  <Target Name="ExportBrand" BeforeTargets="BeforeCompile" Inputs="$(MSBuildThisFileDirectory)..\..\branding\penelope.svg" Outputs="$(MSBuildThisFileDirectory)Assets\penelope.ico;$(MSBuildThisFileDirectory)..\..\web\public\favicon.svg;$(MSBuildThisFileDirectory)..\..\web\public\favicon.ico">
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)..\..\scripts\BrandExport\BrandExport.csproj&quot; -c Release -- &quot;$(MSBuildThisFileDirectory)..\..\branding\penelope.svg&quot; &quot;$(MSBuildThisFileDirectory)Assets&quot; &quot;$(MSBuildThisFileDirectory)..\..\web\public&quot;" />
+  </Target>
+</Project>

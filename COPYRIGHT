@@ -1,0 +1,23 @@
+Penelope
+Copyright (C) 2026 Penelope contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+The corresponding source for a build of Penelope is the commit of this
+repository that produced it. Penelope's own dashboard listens on
+127.0.0.1 and is not offered to other computers.
+
+To apply this notice to a new source file, place the block above at the
+top of the file and add a one-line description of what the file does.
+Third-party files keep their own licenses. See THIRD-PARTY-NOTICES.

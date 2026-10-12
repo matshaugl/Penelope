@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Penelope.Plugins.Sample</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Penelope.Abstractions\Penelope.Abstractions.csproj" />
+  </ItemGroup>
+  <Target Name="CopyToPlugins" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginDir>$(MSBuildThisFileDirectory)..\..\plugins\sample\</PluginDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(PluginDir)Penelope.Plugins.Sample.dll" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\manifest.json" DestinationFiles="$(PluginDir)manifest.json" />
+  </Target>
+</Project>
