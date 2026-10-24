@@ -2,7 +2,7 @@
   "id": "ollama",
   "name": "Ollama",
   "assembly": "Penelope.Modules.Ollama.dll",
-  "hostApi": 1,
+  "hostApi": "1.0",
   "ui": "ui/index.js",
   "summary": "The local model server. Penelope starts and stops it on this computer.",
   "nav": [

@@ -4,10 +4,14 @@ using System.Text.Json;
 using Penelope.Abstractions;
 using Penelope.Host.Agent;
 using Penelope.Host.Api;
+using Penelope.Host.Jobs;
 using Penelope.Host.Plugins;
 using Penelope.Host.Security;
 using Penelope.Host.Settings;
 using Penelope.Host.Tray;
+using Penelope.Infrastructure.Downloads;
+using Penelope.Infrastructure.Events;
+using Penelope.Infrastructure.Logging;
 
 public class Program
 {
@@ -62,10 +66,14 @@ var configPath = builder.Configuration["Penelope:ConfigPath"]
 
 var catalog = PluginCatalog.Load(pluginsPath, LoggerFactory.Create(logging => logging.AddSimpleConsole()).CreateLogger("plugins"));
 builder.Services.AddSingleton(catalog);
+builder.Services.AddSingleton<ToolProviderRegistry>();
+builder.Services.AddSingleton<IDownloadManager, DownloadManager>();
+builder.Services.AddSingleton<IEventBus, EventBus>();
+builder.Services.AddSingleton<IPenelopeDiagnosticLog, PenelopeDiagnosticLog>();
 builder.Services.AddSingleton<IWebSearch, DuckDuckGoSearch>();
 builder.Services.AddSingleton<IAgentToolSource, WebSearchToolSource>();
 builder.Services.AddSingleton<AgentToolRegistry>();
-builder.Services.AddSingleton<Penelope.Host.Jobs.JobRunner>();
+builder.Services.AddSingleton<JobRunner>();
 builder.Services.AddSingleton(new AppConfigStore(configPath));
 builder.Services.AddSingleton(new SignInStartup(memoryOnly: testing));
 builder.Services.AddSingleton<SessionToken>();
@@ -102,6 +110,7 @@ HealthEndpoints.Map(app);
 ChatEndpoints.Map(app);
 SystemEndpoints.Map(app);
 JobEndpoints.Map(app);
+DiagnosticsEndpoints.Map(app);
 HostEndpoints.Map(app);
 ModuleEndpoints.Map(app, catalog);
 

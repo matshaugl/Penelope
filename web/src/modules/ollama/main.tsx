@@ -80,7 +80,7 @@ function JobView({ job, onCancel }: { job: Job; onCancel: () => void }) {
       <div className="progress-track" aria-hidden="true">
         <div className="progress-fill" style={{ width: `${width}%` }} />
       </div>
-      {(job.state === "queued" || job.state === "running") && job.cancelAllowed && (
+      {(job.state === "pending" || job.state === "running") && job.cancelAllowed && (
         <div className="actions">
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
         </div>

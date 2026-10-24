@@ -204,8 +204,11 @@ public sealed class OllamaClient
 
         log.Progress(1, 1, "Finished.");
         log.Info($"{name} is on this computer.");
+        OnModelPulled?.Invoke(name);
         return new ModuleActionResult(true, null);
     }
+
+    public Action<string>? OnModelPulled { get; set; }
 
     public async Task<ModuleActionResult> GenerateAsync(string name, int keepAlive, CancellationToken cancellationToken)
     {

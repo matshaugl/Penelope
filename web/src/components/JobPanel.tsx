@@ -17,7 +17,7 @@ export function JobPanel({ job, onCancel }: { job: Job; onCancel: () => void }) 
     }
   }, [job]);
 
-  const running = job.state === "queued" || job.state === "running";
+  const running = job.state === "pending" || job.state === "running";
   return (
     <section className="job" aria-label="Progress">
       <p>{job.message}</p>

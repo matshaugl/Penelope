@@ -46,6 +46,9 @@ export function Sidebar({
         <NavLink to="/tools" end className={({ isActive }) => (isActive ? "active" : undefined)}>
           Tools
         </NavLink>
+        <NavLink to="/diagnostics" className={({ isActive }) => (isActive ? "active" : undefined)}>
+          Diagnostics
+        </NavLink>
       </div>
       <div className="sidebar-footer">
         <label className="check">

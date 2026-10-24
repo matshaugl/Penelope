@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Penelope.Abstractions\Penelope.Abstractions.csproj" />
+    <ProjectReference Include="..\Penelope.Infrastructure\Penelope.Infrastructure.csproj" />
     <InternalsVisibleTo Include="Penelope.Host.Tests" />
   </ItemGroup>
   <Target Name="ExportBrand" BeforeTargets="BeforeCompile" Inputs="$(MSBuildThisFileDirectory)..\..\branding\penelope.svg" Outputs="$(MSBuildThisFileDirectory)Assets\penelope.ico;$(MSBuildThisFileDirectory)..\..\web\public\favicon.svg;$(MSBuildThisFileDirectory)..\..\web\public\favicon.ico">

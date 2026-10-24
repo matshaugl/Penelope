@@ -9,10 +9,14 @@ public sealed class JobRunner
 {
     private readonly ConcurrentDictionary<string, JobRecord> _jobs = new();
     private readonly ILogger<JobRunner> _logger;
+    private readonly IEventBus _events;
+    private readonly IPenelopeDiagnosticLog _diagnostics;
 
-    public JobRunner(ILogger<JobRunner> logger)
+    public JobRunner(ILogger<JobRunner> logger, IEventBus events, IPenelopeDiagnosticLog diagnostics)
     {
         _logger = logger;
+        _events = events;
+        _diagnostics = diagnostics;
     }
 
     public JobSnapshot? Find(string id)
@@ -24,7 +28,7 @@ public sealed class JobRunner
     {
         var active = _jobs.Values
             .Select(job => job.Snapshot())
-            .Where(job => job.ModuleId == moduleId && job.State is "queued" or "running")
+            .Where(job => job.ModuleId == moduleId && JobStateNames.IsActive(job.State))
             .OrderByDescending(job => job.StartedAt)
             .FirstOrDefault();
         return active?.Id;
@@ -44,7 +48,7 @@ public sealed class JobRunner
     {
         return _jobs.Values
             .Select(job => job.Snapshot())
-            .FirstOrDefault(job => job.ModuleId == moduleId && job.Kind == kind && job.State is "queued" or "running");
+            .FirstOrDefault(job => job.ModuleId == moduleId && job.Kind == kind && JobStateNames.IsActive(job.State));
     }
 
     public JobSnapshot Start(string moduleId, string kind, Func<IJobLog, CancellationToken, Task<ModuleActionResult>> work)
@@ -55,8 +59,15 @@ public sealed class JobRunner
             return existing;
         }
 
-        var record = new JobRecord(moduleId, kind) { Work = work };
+        var record = new JobRecord(moduleId, kind, _events, _diagnostics) { Work = work };
         _jobs[record.Id] = record;
+        PublishJobState(record, JobState.Pending);
+        if (kind is "install" or "upgrade")
+        {
+            _events.Publish(new PenelopeEvent(PenelopeEventNames.InstallStarted, DateTimeOffset.UtcNow, moduleId, record.Id));
+        }
+
+        _diagnostics.Write(PenelopeLogLevel.Info, "jobs", $"Started {kind} for {moduleId} ({record.Id}).");
         _ = Task.Run(() => RunAsync(record, work));
         return record.Snapshot();
     }
@@ -98,35 +109,72 @@ public sealed class JobRunner
     private async Task RunAsync(JobRecord record, Func<IJobLog, CancellationToken, Task<ModuleActionResult>> work)
     {
         record.MarkRunning();
+        PublishJobState(record, JobState.Running);
         try
         {
             var result = await work(record, record.Token);
             if (record.IsCancellationRequested)
             {
-                record.Complete("cancelled", "Cancelled.", null);
+                record.Complete(JobState.Cancelled, "Cancelled.", null);
+                PublishJobState(record, JobState.Cancelled);
             }
             else if (!result.Succeeded)
             {
-                record.Complete("failed", result.Failure?.Summary ?? "The step didn't finish.", result.Failure);
+                record.Complete(JobState.Failed, result.Failure?.Summary ?? "The step didn't finish.", result.Failure);
+                PublishJobState(record, JobState.Failed);
+                if (record.Kind is "install" or "upgrade")
+                {
+                    _events.Publish(new PenelopeEvent(
+                        PenelopeEventNames.InstallFailed,
+                        DateTimeOffset.UtcNow,
+                        record.ModuleId,
+                        record.Id,
+                        Message: result.Failure?.Summary));
+                }
             }
             else
             {
-                record.Complete("succeeded", "Finished.", null);
+                record.Complete(JobState.Completed, "Finished.", null);
+                PublishJobState(record, JobState.Completed);
+                if (record.Kind is "install" or "upgrade")
+                {
+                    _events.Publish(new PenelopeEvent(
+                        PenelopeEventNames.InstallCompleted,
+                        DateTimeOffset.UtcNow,
+                        record.ModuleId,
+                        record.Id));
+                }
             }
         }
         catch (OperationCanceledException)
         {
-            record.Complete("cancelled", "Cancelled.", null);
+            record.Complete(JobState.Cancelled, "Cancelled.", null);
+            PublishJobState(record, JobState.Cancelled);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Job {JobId} failed", record.Id);
+            _diagnostics.Write(PenelopeLogLevel.Error, "jobs", $"Job {record.Id} failed: {ex.Message}");
             record.Error("The operation stopped because of an unexpected error.");
-            record.Complete("failed", "Something went wrong.", new FailureCard(
+            record.Complete(JobState.Failed, "Something went wrong.", new FailureCard(
                 "Something went wrong.",
                 "Penelope couldn't finish this step. Try again.",
                 [new FailureFix("retry", "Try again", FixKind.Retry, null)]));
+            PublishJobState(record, JobState.Failed);
         }
+    }
+
+    private void PublishJobState(JobRecord record, JobState state)
+    {
+        var snapshot = record.Snapshot();
+        _events.Publish(new PenelopeEvent(
+            PenelopeEventNames.JobStateChanged,
+            DateTimeOffset.UtcNow,
+            record.ModuleId,
+            record.Id,
+            snapshot.Completed,
+            snapshot.Total,
+            JobStateNames.ToApi(state)));
     }
 }
 
@@ -138,7 +186,7 @@ public sealed class JobSnapshot
 
     public required string Kind { get; init; }
 
-    public required string State { get; init; }
+    public required JobState State { get; init; }
 
     public required string Message { get; init; }
 
@@ -163,19 +211,23 @@ sealed class JobRecord : IJobLog
     private readonly List<JobLogLine> _log = [];
     private readonly List<ChannelReaderHolder> _subscribers = [];
     private readonly CancellationTokenSource _cts = new();
-    private string _state = "queued";
+    private readonly IEventBus _events;
+    private readonly IPenelopeDiagnosticLog _diagnostics;
+    private JobState _state = JobState.Pending;
     private string _message = "Waiting.";
     private long _completed;
     private long _total;
     private bool _cancelAllowed = true;
     private FailureCard? _failure;
 
-    public JobRecord(string moduleId, string kind)
+    public JobRecord(string moduleId, string kind, IEventBus events, IPenelopeDiagnosticLog diagnostics)
     {
         Id = Guid.NewGuid().ToString("n");
         ModuleId = moduleId;
         Kind = kind;
         StartedAt = DateTimeOffset.UtcNow;
+        _events = events;
+        _diagnostics = diagnostics;
     }
 
     public string Id { get; }
@@ -209,6 +261,14 @@ sealed class JobRecord : IJobLog
             _message = message;
         }
 
+        _events.Publish(new PenelopeEvent(
+            PenelopeEventNames.DownloadProgress,
+            DateTimeOffset.UtcNow,
+            ModuleId,
+            Id,
+            completed,
+            total,
+            message));
         Publish();
     }
 
@@ -226,7 +286,7 @@ sealed class JobRecord : IJobLog
     {
         lock (_gate)
         {
-            _state = "running";
+            _state = JobState.Running;
             _message = "Working.";
         }
 
@@ -237,7 +297,7 @@ sealed class JobRecord : IJobLog
     {
         lock (_gate)
         {
-            if (_state is not ("queued" or "running") || !_cancelAllowed)
+            if (!JobStateNames.IsActive(_state) || !_cancelAllowed)
             {
                 return false;
             }
@@ -248,11 +308,11 @@ sealed class JobRecord : IJobLog
         return true;
     }
 
-    public void Complete(string state, string message, FailureCard? failure)
+    public void Complete(JobState state, string message, FailureCard? failure)
     {
         lock (_gate)
         {
-            if (_state is "succeeded" or "failed" or "cancelled")
+            if (_state is JobState.Completed or JobState.Failed or JobState.Cancelled)
             {
                 return;
             }
@@ -260,7 +320,7 @@ sealed class JobRecord : IJobLog
             _state = state;
             _message = message;
             _failure = failure;
-            if (_total > 0 && state == "succeeded")
+            if (_total > 0 && state == JobState.Completed)
             {
                 _completed = _total;
             }
@@ -300,6 +360,13 @@ sealed class JobRecord : IJobLog
             }
         }
 
+        var penelopeLevel = level switch
+        {
+            "warning" => PenelopeLogLevel.Warning,
+            "error" => PenelopeLogLevel.Error,
+            _ => PenelopeLogLevel.Info,
+        };
+        _diagnostics.Write(penelopeLevel, $"job:{ModuleId}", text);
         Publish();
     }
 
@@ -330,7 +397,7 @@ sealed class JobRecord : IJobLog
             Message = _message,
             Completed = _completed,
             Total = _total,
-            CancelAllowed = _cancelAllowed && _state is "queued" or "running",
+            CancelAllowed = _cancelAllowed && JobStateNames.IsActive(_state),
             StartedAt = StartedAt,
             Log = _log.ToList(),
             Failure = _failure,

@@ -79,14 +79,18 @@ public sealed class PluginCatalog
             return LoadedPlugin.Broken(Path.GetFileName(folder), "This tool couldn't be loaded.", folder);
         }
 
-        if (manifest.HostApi > HostApi.Current)
+        if (!TryReadHostApi(manifest.HostApi, out var hostApi))
         {
-            return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool needs a newer Penelope.", folder, manifest.Summary);
+            logger.LogWarning("Plugin manifest {Path} has an unreadable hostApi", manifestPath);
+            return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool couldn't be loaded.", folder, manifest.Summary);
         }
 
-        if (manifest.HostApi != HostApi.Current)
+        switch (hostApi.CheckAgainst(HostApi.Current))
         {
-            return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool was built for an older Penelope.", folder, manifest.Summary);
+            case HostApiCompatibility.NeedsNewerHost:
+                return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool needs a newer Penelope.", folder, manifest.Summary);
+            case HostApiCompatibility.BuiltForOlderHost:
+                return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool was built for an older Penelope.", folder, manifest.Summary);
         }
 
         if (string.IsNullOrWhiteSpace(manifest.Assembly))
@@ -160,6 +164,26 @@ public sealed class PluginCatalog
             return LoadedPlugin.Broken(manifest.Id, manifest.Name, "This tool couldn't be loaded.", folder, manifest.Summary);
         }
     }
+
+    // A bare integer is the pre-1.0 manifest form and means MAJOR.0. A missing value is treated as 0.0.
+    internal static bool TryReadHostApi(JsonElement value, out HostApiVersion version)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Undefined:
+            case JsonValueKind.Null:
+                version = new HostApiVersion(0, 0);
+                return true;
+            case JsonValueKind.Number when value.TryGetInt32(out var major) && major >= 0:
+                version = new HostApiVersion(major, 0);
+                return true;
+            case JsonValueKind.String:
+                return HostApiVersion.TryParse(value.GetString(), out version);
+            default:
+                version = default;
+                return false;
+        }
+    }
 }
 
 public sealed class LoadedPlugin
@@ -214,7 +238,7 @@ sealed class PluginManifest
 
     public string? Ui { get; set; }
 
-    public int HostApi { get; set; }
+    public JsonElement HostApi { get; set; }
 
     public string? Summary { get; set; }
 

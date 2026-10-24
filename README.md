@@ -59,6 +59,9 @@ These are in the source today.
 
 ### Planned features
 
+Direction is in [`docs/ROADMAP.md`](docs/ROADMAP.md); task-level progress is in [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+
+- A Docker provider plugin.
 - An Odysseus plugin for the full chat product.
 - A FlashML FreeToken plugin.
 - More Agent tools, registered the same way web search is registered today. Files, diagnostics, and tool actions are not in this version.
@@ -182,6 +185,8 @@ Ollama's own pages travel inside the plugin. The shell mounts them. Chat and Age
 
 The design rule is that a tool owns its process, its installer, and its version. The shell owns the session, the job log, and the page around that tool.
 
+Contributors and coding agents should start with [`docs/README.md`](docs/README.md): it lists the reading order, which document owns each topic, and the rules that must not break. Layers and boundaries are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the reasons behind them are in [`docs/ADR/`](docs/ADR/README.md).
+
 ## Project goals
 
 - **Simplicity.** One next action on Home. Three steps on the first visit. Status, progress, and errors are sentences.
@@ -204,7 +209,7 @@ FreeToken is the same kind of future plugin: its own folder, its own manifest, a
 The plugin contract is already the way new tools are added.
 
 - A folder under `plugins/` with `manifest.json`.
-- A .NET assembly built against host API 1.
+- A .NET assembly built against host API 1.0, declared in the manifest as `"hostApi": "1.0"`. Compatibility rules are in [`docs/PLUGIN_SYSTEM.md`](docs/PLUGIN_SYSTEM.md#hostapi-versioning).
 - An optional `ui/index.js` that exports `mount`. Without it, Penelope shows the generic tool page: status, version, Install, Update, Start, and Stop.
 - Optional model and Agent-tool interfaces. A plugin can ignore both.
 
@@ -253,11 +258,12 @@ The console prints a one-time dashboard link. Use that link. A second launch sig
 ```text
 Penelope/
   branding/                 Logo source, branding/penelope.svg
-  docs/                     Product specification and screenshot placeholders
+  docs/                     Specification, architecture, ADRs (start at docs/README.md)
   installer/penelope.iss    Per-user setup
   scripts/publish.ps1       Web build, self-contained host, installer
   src/
-    Penelope.Abstractions/  Plugin contracts. Host API 1.
+    Penelope.Abstractions/  Plugin contracts. Host API 1.0.
+    Penelope.Infrastructure/ Download manager, event bus, diagnostic log
     Penelope.Host/          Dashboard, session, tray, jobs, readings
     Penelope.Modules.Ollama/ Ollama plugin. The host does not reference it.
     Penelope.Plugins.Sample/ Throwaway plugin used by tests

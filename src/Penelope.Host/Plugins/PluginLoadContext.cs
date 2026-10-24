@@ -15,7 +15,7 @@ sealed class PluginLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        if (assemblyName.Name == "Penelope.Abstractions")
+        if (assemblyName.Name is "Penelope.Abstractions" or "Penelope.Infrastructure")
         {
             return null;
         }

@@ -46,6 +46,27 @@ public class DashboardTests : IClassFixture<PenelopeFactory>
         Assert.Equal("sample", sample!.Module!.Id);
     }
 
+    [Theory]
+    [InlineData("\"1.0\"", null)]
+    [InlineData("1", null)]
+    [InlineData("\"1.1\"", "This tool needs a newer Penelope.")]
+    [InlineData("\"2.0\"", "This tool needs a newer Penelope.")]
+    [InlineData("\"0.9\"", "This tool was built for an older Penelope.")]
+    [InlineData("\"one\"", "This tool couldn't be loaded.")]
+    public void HostApiVersionDecidesWhetherAPluginLoads(string hostApi, string? expectedError)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "penelope-plugins-" + Guid.NewGuid().ToString("n"));
+        CopyDirectory(Path.Combine(Repo.Root, "plugins", "sample"), Path.Combine(root, "sample"));
+        var manifestPath = Path.Combine(root, "sample", "manifest.json");
+        var manifest = File.ReadAllText(manifestPath).Replace("\"hostApi\": \"1.0\"", $"\"hostApi\": {hostApi}");
+        File.WriteAllText(manifestPath, manifest);
+
+        var sample = PluginCatalog.Load(root, LoggerFactory.Create(_ => { }).CreateLogger("test")).Find("sample");
+
+        Assert.NotNull(sample);
+        Assert.Equal(expectedError, sample!.LoadError);
+    }
+
     [Fact]
     public async Task MutatingCallWithoutSessionIsRejected()
     {
@@ -85,7 +106,7 @@ public class DashboardTests : IClassFixture<PenelopeFactory>
         for (var attempt = 0; attempt < 40; attempt++)
         {
             var snapshot = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{jobId}");
-            if (snapshot.GetProperty("state").GetString() is "failed" or "succeeded" or "cancelled")
+            if (snapshot.GetProperty("state").GetString() is "failed" or "completed" or "cancelled")
             {
                 job = snapshot;
                 break;

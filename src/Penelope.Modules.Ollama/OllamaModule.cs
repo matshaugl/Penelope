@@ -3,7 +3,7 @@ using Penelope.Abstractions;
 
 namespace Penelope.Modules.Ollama;
 
-public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
+public sealed class OllamaModule : IToolProvider, IJobAwareModule, IInfrastructureModule, IModelProvider
 {
     private readonly object _gate = new();
     private readonly SemaphoreSlim _operation = new(1, 1);
@@ -15,6 +15,8 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
     private readonly Func<string?> _readHost;
     private readonly Func<IReadOnlyList<string>> _listenAddresses;
     private readonly OllamaSetup _setup;
+    private IEventBus? _events;
+    private IPenelopeDiagnosticLog? _diagnostics;
     private readonly int _port;
     private readonly TimeSpan _startTimeout;
     private readonly List<int> _started = [];
@@ -56,6 +58,8 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
     }
 
     public string Id => "ollama";
+
+    public string ProviderKind => ToolProviderKinds.Ollama;
 
     public string ProviderId => "ollama";
 
@@ -282,6 +286,7 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
             if (version is not null)
             {
                 RememberRunning(version);
+                PublishToolEvent(PenelopeEventNames.ToolStarted);
                 return new ModuleActionResult(true, null);
             }
 
@@ -317,6 +322,7 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
                 if (version is not null)
                 {
                     RememberRunning(version);
+                    PublishToolEvent(PenelopeEventNames.ToolStarted);
                     return new ModuleActionResult(true, null);
                 }
 
@@ -481,6 +487,7 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
                 var location = _process.Locate();
                 RememberLocation(location);
                 SetState(location.IsPresent ? ToolRunState.Stopped : ToolRunState.NotInstalled);
+                PublishToolEvent(PenelopeEventNames.ToolStopped);
                 return new ModuleActionResult(true, null);
             }
 
@@ -512,6 +519,7 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
                 {
                     RememberLocation(locationNow);
                     SetState(locationNow.IsPresent ? ToolRunState.Stopped : ToolRunState.NotInstalled);
+                    PublishToolEvent(PenelopeEventNames.ToolStopped);
                     return new ModuleActionResult(true, null);
                 }
 
@@ -525,9 +533,31 @@ public sealed class OllamaModule : IToolModule, IJobAwareModule, IModelProvider
                 []));
     }
 
+    public void UseInfrastructure(HostInfrastructure infrastructure)
+    {
+        if (_setup is GitHubOllamaSetup github)
+        {
+            github.Attach(infrastructure);
+        }
+
+        _events = infrastructure.Events;
+        _diagnostics = infrastructure.Diagnostics;
+        _client.OnModelPulled = name => _events?.Publish(new PenelopeEvent(
+            PenelopeEventNames.ModelAdded,
+            DateTimeOffset.UtcNow,
+            Id,
+            Message: name));
+    }
+
     public void UseJobs(IJobQueue jobs)
     {
         _api.UseJobs(jobs);
+    }
+
+    private void PublishToolEvent(string name)
+    {
+        _events?.Publish(new PenelopeEvent(name, DateTimeOffset.UtcNow, Id));
+        _diagnostics?.Write(PenelopeLogLevel.Info, ProviderKind, name);
     }
 
     public void ContributeApi(IModuleEndpointBuilder endpoints)

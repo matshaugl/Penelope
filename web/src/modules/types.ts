@@ -71,7 +71,7 @@ export interface Job {
   id: string;
   moduleId: string;
   kind: string;
-  state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  state: "pending" | "running" | "completed" | "failed" | "cancelled";
   message: string;
   completed: number;
   total: number;

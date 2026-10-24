@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Penelope.Abstractions;
+using Penelope.Infrastructure.Downloads;
 
 namespace Penelope.Modules.Ollama;
 
@@ -250,7 +251,7 @@ internal sealed class GitHubOllamaSetup : OllamaSetup
 {
     private const int Attempts = 3;
 
-    private readonly HttpClient _http;
+    private IDownloadManager _downloads;
     private readonly string _folder;
 
     public GitHubOllamaSetup()
@@ -258,14 +259,15 @@ internal sealed class GitHubOllamaSetup : OllamaSetup
     {
     }
 
-    internal GitHubOllamaSetup(HttpMessageHandler? handler, string? downloadFolder)
+    internal GitHubOllamaSetup(HttpMessageHandler? handler, string? downloadFolder, IDownloadManager? downloads = null)
     {
-        _http = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false }, disposeHandler: handler is null)
-        {
-            Timeout = Timeout.InfiniteTimeSpan,
-        };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Penelope");
+        _downloads = downloads ?? new DownloadManager(handler);
         _folder = downloadFolder ?? DownloadFolder();
+    }
+
+    internal void Attach(HostInfrastructure infrastructure)
+    {
+        _downloads = infrastructure.Downloads;
     }
 
     public override async Task<string?> LatestVersionAsync(CancellationToken cancellationToken)
@@ -362,222 +364,58 @@ internal sealed class GitHubOllamaSetup : OllamaSetup
 
         var file = InstallerPath();
         log.Info($"Download URL {release.InstallerUrl}");
-        string? incomplete = null;
-        for (var attempt = 1; attempt <= Attempts; attempt++)
+        try
         {
-            try
+            var result = await _downloads.DownloadFileAsync(
+                new DownloadRequest(
+                    release.InstallerUrl,
+                    file,
+                    release.SizeBytes,
+                    expected,
+                    Attempts,
+                    ProgressLabel: "Downloading Ollama"),
+                log,
+                cancellationToken);
+            if (!result.Succeeded)
             {
-                log.Progress(0, release.SizeBytes ?? 0, "Downloading Ollama");
-                await DownloadFile(release.InstallerUrl, file, release.SizeBytes, log, cancellationToken);
-                var length = new FileInfo(file).Length;
-                log.Info($"File size {length}");
-                if (release.SizeBytes is long expectedSize && length != expectedSize)
-                {
-                    throw new IOException($"Download stopped at {length} of {expectedSize} bytes.");
-                }
-
-                if (expected is null)
-                {
-                    return new SetupOutcome(SetupProblem.None, release.Version);
-                }
-
-                var actual = await HashFile(file, cancellationToken);
-                log.Info($"Expected checksum {expected}");
-                log.Info($"Calculated checksum {actual}");
-                if (!expected.Equals(actual, StringComparison.OrdinalIgnoreCase))
-                {
-                    var detail = $"The downloaded installer didn't match the published checksum. Expected {expected}. Calculated {actual}. File size {length} bytes. The file is still at {file}.";
-                    log.Error(detail);
-                    return new SetupOutcome(SetupProblem.Checksum, null, detail);
-                }
-
-                log.Info("The installer matches the published checksum.");
-                return new SetupOutcome(SetupProblem.None, release.Version);
+                var kept = File.Exists(file) ? $" The file is still at {file}." : "";
+                var problem = result.Error is not null && result.Error.Contains("checksum", StringComparison.OrdinalIgnoreCase)
+                    ? SetupProblem.Checksum
+                    : SetupProblem.Unreachable;
+                return new SetupOutcome(problem, null, result.Error ?? ("The download didn't finish." + kept));
             }
-            catch (OperationCanceledException)
-            {
-                TryDelete(file);
-                throw;
-            }
-            catch (Exception ex) when (IsNetwork(ex) && !cancellationToken.IsCancellationRequested)
-            {
-                incomplete = ex.Message;
-                log.Warning($"Download attempt {attempt} of {Attempts} didn't finish. {ex.Message}");
-                if (attempt == Attempts)
-                {
-                    break;
-                }
 
-                log.Info("Penelope will try the download again.");
-            }
+            return new SetupOutcome(SetupProblem.None, release.Version);
         }
-
-        var kept = File.Exists(file) ? $" The file is still at {file}." : "";
-        return new SetupOutcome(
-            SetupProblem.Unreachable,
-            null,
-            $"The download stopped before the file was complete. {incomplete}{kept}");
+        catch (OperationCanceledException)
+        {
+            TryDelete(file);
+            throw;
+        }
+        catch (Exception ex) when (IsNetwork(ex) && !cancellationToken.IsCancellationRequested)
+        {
+            var kept = File.Exists(file) ? $" The file is still at {file}." : "";
+            return new SetupOutcome(SetupProblem.Unreachable, null, $"The download stopped before the file was complete. {ex.Message}{kept}");
+        }
     }
 
     private async Task<SetupRelease?> FindAsync(Penelope.Abstractions.IJobLog? log, CancellationToken cancellationToken)
     {
-        for (var attempt = 1; attempt <= Attempts; attempt++)
-        {
-            using var response = await Send(OllamaRelease.ReleasesApi, log, acceptGitHub: true, cancellationToken);
-            if (response.IsSuccessStatusCode)
-            {
-                return OllamaRelease.ParseLatest(await response.Content.ReadAsStringAsync(cancellationToken));
-            }
-
-            if (attempt < Attempts && IsRetryStatus(response.StatusCode))
-            {
-                log?.Warning($"Download attempt {attempt} of {Attempts} returned HTTP {(int)response.StatusCode}.");
-                continue;
-            }
-
-            throw new HttpRequestException($"HTTP {(int)response.StatusCode}");
-        }
-
-        throw new HttpRequestException("The release lookup didn't finish.");
+        var json = await _downloads.GetStringAsync(
+            new DownloadRequest(OllamaRelease.ReleasesApi, MaxAttempts: Attempts, AcceptGitHubJson: true),
+            log,
+            cancellationToken);
+        return OllamaRelease.ParseLatest(json);
     }
 
     private async Task<string> ReadText(string url, Penelope.Abstractions.IJobLog log, CancellationToken cancellationToken)
     {
-        for (var attempt = 1; attempt <= Attempts; attempt++)
-        {
-            try
-            {
-                using var response = await Send(url, log, acceptGitHub: false, cancellationToken);
-                if (!response.IsSuccessStatusCode)
-                {
-                    if (attempt < Attempts && IsRetryStatus(response.StatusCode))
-                    {
-                        log.Warning($"Download attempt {attempt} of {Attempts} returned HTTP {(int)response.StatusCode}.");
-                        continue;
-                    }
-
-                    throw new HttpRequestException($"HTTP {(int)response.StatusCode}");
-                }
-
-                return await response.Content.ReadAsStringAsync(cancellationToken);
-            }
-            catch (Exception ex) when (IsNetwork(ex) && attempt < Attempts && !cancellationToken.IsCancellationRequested)
-            {
-                log.Warning($"Download attempt {attempt} of {Attempts} didn't finish. Penelope will try again.");
-            }
-        }
-
-        throw new HttpRequestException("The checksum download didn't finish.");
-    }
-
-    private async Task<long> DownloadFile(
-        string url,
-        string destination,
-        long? expectedSize,
-        Penelope.Abstractions.IJobLog log,
-        CancellationToken cancellationToken)
-    {
-        using var response = await Send(url, log, acceptGitHub: false, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException($"HTTP {(int)response.StatusCode}");
-        }
-
-        var total = response.Content.Headers.ContentLength ?? expectedSize ?? 0;
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-        var buffer = new byte[81920];
-        long done = 0;
-        long reported = 0;
-        while (true)
-        {
-            var read = await input.ReadAsync(buffer, cancellationToken);
-            if (read == 0)
-            {
-                break;
-            }
-
-            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-            done += read;
-            if (done - reported >= 256 * 1024 || (total > 0 && done >= total))
-            {
-                reported = done;
-                log.Progress(done, total, "Downloading Ollama");
-            }
-        }
-
-        if (response.Content.Headers.ContentLength is long declared && done != declared)
-        {
-            throw new IOException($"Download stopped at {done} of {declared} bytes.");
-        }
-
-        return done;
-    }
-
-    private async Task<HttpResponseMessage> Send(
-        string url,
-        Penelope.Abstractions.IJobLog? log,
-        bool acceptGitHub,
-        CancellationToken cancellationToken)
-    {
-        var current = url;
-        for (var hop = 0; hop < 8; hop++)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            if (acceptGitHub)
-            {
-                request.Headers.Accept.ParseAdd("application/vnd.github+json");
-            }
-
-            var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            log?.Info($"HTTP {(int)response.StatusCode} {current}");
-            if (IsRedirect(response.StatusCode))
-            {
-                var location = response.Headers.Location ?? throw new InvalidOperationException("The redirect had no destination.");
-                var next = location.IsAbsoluteUri ? location : new Uri(new Uri(current), location);
-                response.Dispose();
-                if (!string.Equals(next.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("The download redirected away from HTTPS.");
-                }
-
-                current = next.AbsoluteUri;
-                log?.Info($"Redirected to {current}");
-                continue;
-            }
-
-            log?.Info($"Final URL {current}");
-            return response;
-        }
-
-        throw new InvalidOperationException("The download redirected too many times.");
-    }
-
-    private static async Task<string> HashFile(string path, CancellationToken cancellationToken)
-    {
-        await using var stream = File.OpenRead(path);
-        var hash = await SHA256.HashDataAsync(stream, cancellationToken);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return await _downloads.GetStringAsync(new DownloadRequest(url, MaxAttempts: Attempts), log, cancellationToken);
     }
 
     private string InstallerPath()
     {
         return Path.Combine(_folder, "OllamaSetup.exe");
-    }
-
-    private static bool IsRedirect(HttpStatusCode status)
-    {
-        return status is HttpStatusCode.MovedPermanently
-            or HttpStatusCode.Redirect
-            or HttpStatusCode.RedirectMethod
-            or HttpStatusCode.TemporaryRedirect
-            or HttpStatusCode.PermanentRedirect;
-    }
-
-    private static bool IsRetryStatus(HttpStatusCode status)
-    {
-        var code = (int)status;
-        return code is 408 or 429 || code >= 500;
     }
 
     private async Task<SetupOutcome> TryWinget(Penelope.Abstractions.IJobLog log, CancellationToken cancellationToken)

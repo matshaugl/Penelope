@@ -77,11 +77,21 @@ static class ModuleEndpoints
         });
 
         var queue = new HostJobQueue(app.Services.GetRequiredService<JobRunner>());
+        var infrastructure = new HostInfrastructure(
+            app.Services.GetRequiredService<IDownloadManager>(),
+            app.Services.GetRequiredService<IEventBus>(),
+            app.Services.GetRequiredService<IPenelopeDiagnosticLog>(),
+            queue);
         foreach (var plugin in catalog.Plugins)
         {
             if (plugin.Module is null)
             {
                 continue;
+            }
+
+            if (plugin.Module is IInfrastructureModule wired)
+            {
+                wired.UseInfrastructure(infrastructure);
             }
 
             if (plugin.Module is IJobAwareModule aware)
@@ -226,6 +236,7 @@ static class ModuleEndpoints
         return new
         {
             id = plugin.Id,
+            providerKind = plugin.Module is IToolProvider provider ? provider.ProviderKind : plugin.Id,
             name = plugin.DisplayName,
             summary = plugin.Summary,
             availability = plugin.Availability,

@@ -62,7 +62,7 @@ export function GenericModulePage() {
     const onJob = (event: Event) => {
       const next = JSON.parse((event as MessageEvent).data) as Job;
       setJob(next);
-      if (next.state === "succeeded" || next.state === "failed" || next.state === "cancelled") {
+      if (next.state === "completed" || next.state === "failed" || next.state === "cancelled") {
         void refresh();
         void load();
       }
@@ -137,7 +137,7 @@ export function GenericModulePage() {
     );
   }
 
-  const runningJob = job && (job.state === "queued" || job.state === "running");
+  const runningJob = job && (job.state === "pending" || job.state === "running");
   const installed = Boolean(module.release?.installedVersion);
   const failure = job?.failure ?? actionFailure;
 

@@ -6,6 +6,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Penelope.Abstractions\Penelope.Abstractions.csproj" />
+    <ProjectReference Include="..\Penelope.Infrastructure\Penelope.Infrastructure.csproj" />
     <InternalsVisibleTo Include="Penelope.Host.Tests" />
   </ItemGroup>
   <ItemGroup>
